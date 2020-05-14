@@ -25,30 +25,63 @@ def BlankGet(config):
 *                                                                                             *
 * USER INPUT NEEDED:                                                                          *
 *                                                                                             *
-*  1. URI Path (/api/fmc_config/v1/domain/{domain_UUID}/object/networkgroups/{object_UUID})   *
-*                                                                                             *
-*  2. Expand output to show details of each object *(Not Supported with {object_UUID} GET)    *
-*                                                                                             *
-*  3. Limit output to a specific number of objects *(Not Supported with {object_UUID} GET)    *
+*  1. URI Path (/v1/computers)                                                                *
 *                                                                                             *
 *  4. Save output to file                                                                     *
 *                                                                                             *
-*                                                                                             *
 ***********************************************************************************************
 ''')
-    # Ask if JSON output should be saved to File
-    save = input('Would You Like To Save The JSON Output To File? [y/N]: ').lower()
-    if save in (['yes','ye','y']):
-        # Random Generated JSON Output File
-        filename = ''
-        for i in range(6):
-            filename += chr(random.randint(97,122))
-        filename += '.txt'
-        print(f'*\n*\nRANDOM OUTPUT FILE CREATED... {filename}\n')
-        with open(filename, 'a') as OutFile:
-            OutFile.write(json.dumps(JSON,indent=4))
-    elif save in (['no','n','']):
-        print(json.dumps(JSON,indent=4))
+    # Set Variables for use
+    debug = config['debug']
+    api_id = config['api_id']
+    api_key = config['api_key']
+    server = config['server']
+
+    # Request URI for GET
+    uri = input('Please provide URI path: ').strip()
+    url = f'https://{server}{uri}'
+
+    # Setup AMP for Endpoints session and auth
+    session = requests.session()
+    session.auth = (api_id, api_key)
+    try:
+        # Get First page
+        response = session.get(url)
+        # Decode JSON response
+        response_json = response.json()
+        # Debug Print
+        if debug: print(json.dumps(response_json,indent=4))
+
+        # Add each item from the response data to a new dicitonary
+        data = [
+            item for item in response_json['data']
+        ]
+        # Paginate if needed
+        while 'next' in response_json['metadata']['links']:
+            next_url = response_json['metadata']['links']['next']
+            response = session.get(next_url)
+            response_json = response.json()
+            for item in response_json['data']:
+                # add each item to existing data dictionary
+                data.update(item)
+
+        # Ask if JSON output should be saved to File
+        save = input('Would You Like To Save The JSON Output To File? [y/N]: ').lower()
+        if save in (['yes','ye','y']):
+            # Random Generated JSON Output File
+            filename = ''
+            for i in range(6):
+                filename += chr(random.randint(97,122))
+            filename += '.txt'
+            print(f'*\n*\nRANDOM OUTPUT FILE CREATED... {filename}\n')
+            with open(filename, 'w') as OutFile:
+                OutFile.write(json.dumps(data,indent=4))
+        elif save in (['no','n','']):
+            print(json.dumps(data,indent=4))
+    except:
+        print(f'{traceback.format_exc()}')
+    # Close Requests session
+    session.close()
 
     return
 
@@ -85,6 +118,8 @@ def PolicyDownload(config):
 
         # Decode JSON response
         response_json = response.json()
+        # Debug Print
+        if debug: json.dumps(response_json)
 
         # Store policy link, product, and name in a dict {'link' : 'product_name'}
         policies = {
@@ -204,11 +239,15 @@ if __name__ == '__main__':
                     F.write(json.dumps(config,indent=4))
             else:
                 exit()
+
         server = config['server']
+        debug = config['debug']
+        # Debug Print
+        if debug: print('!\nDEBUG ENABLED!\n!')
+
         # Validate FQDN
         if server[-1] == '/':
             server = server[:-1]
-
         # Perform Test Connection To FQDN
         s = socket.socket()
         print(f'Attempting to connect to {server} on port 443')

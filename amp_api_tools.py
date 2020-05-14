@@ -11,6 +11,7 @@ import getpass
 import requests
 import xmltodict
 import traceback
+from pandas import json_normalize,concat
 from json.decoder import JSONDecodeError
 
 #
@@ -88,7 +89,7 @@ def BlankGet(config):
 #
 #
 #
-# Define Blank URL Get Script as Function
+# Define Policy Download as Function
 def PolicyDownload(config):
     print ('''
 ***********************************************************************************************
@@ -183,6 +184,90 @@ def PolicyDownload(config):
 
 
 
+#
+#
+#
+# Define Policy Report as Function
+def PolicyReport(config):
+    print ('''
+***********************************************************************************************
+*                        Create Policy Comparison Report CSV Files                            *
+*_____________________________________________________________________________________________*
+*                                                                                             *
+*  No user input required, reports will automatically be saved to current directory           *
+*                                                                                             *
+***********************************************************************************************
+''')
+    # Set Variables for use
+    debug = config['debug']
+    api_id = config['api_id']
+    api_key = config['api_key']
+    server = config['server']
+
+    # Setup AMP for Endpoints session and auth
+    session = requests.session()
+    session.auth = (api_id, api_key)
+    # Policies URL
+    url = f'https://{server}/v1/policies'
+    try:
+        # Get First page of Polices
+        response = session.get(url)
+
+        # Decode JSON response
+        response_json = response.json()
+        # Debug Print
+        if debug: json.dumps(response_json)
+
+        # Store policy links only for each product type
+        policies = {'android':[],'ios':[],'linux':[],'mac':[],'network':[],'windows':[]}
+        for policy in response_json['data']:
+            policies[policy['product']].append(policy['links']['policy'])
+
+        # Paginate if needed
+        while 'next' in response_json['metadata']['links']:
+            next_url = response_json['metadata']['links']['next']
+            response = session.get(next_url)
+            response_json = response.json()
+            for policy in response_json['data']:
+                # Store link, product, and name in existing dictionary
+                policies[policy['product']].append(policy['links']['policy'])
+
+        # Get script file path
+        path = os.path.dirname(os.path.realpath(__file__))
+
+        print(f'Number of polices found: {len(policies)}')
+        print('Downloading Policies....\n')
+        # Iterate over all policies for each product type separately
+        for product,links in policies.items():
+            # Skip any Apple IOS Policies
+            if product == 'ios': continue
+            # Get first Policy to create initial Pandas Dataframe, then delete from links
+            policy_link = links[0]
+            response = session.get(f'{policy_link}.xml')
+            DF = json_normalize(xmltodict.parse(response.text))
+            links.pop(0)
+            # Iterate over remaining links if list not empty
+            if len(links) >= 1:
+                for policy_link in links:
+                    response = session.get(f'{policy_link}.xml')
+                    DFa = json_normalize(xmltodict.parse(response.text))
+                    DF = concat([DF,DFa],ignore_index=True)
+
+            # Change index columns and save as CSV
+            DF.set_index(["Signature.Object.config.janus.policy.name","Signature.Object.config.janus.policy.uuid"],inplace=True)
+            DF.to_csv(f'{product}_policy_report.csv')
+
+            print(f'Polciy report completed for {product}... ')
+
+
+    except:
+        print(f'{traceback.format_exc()}')
+
+    session.close()
+
+    return
+
+
 
 
 #
@@ -268,7 +353,7 @@ if __name__ == '__main__':
 *                                                                                             *
 *  2. Download all Endpoint Policies                                                          *
 *                                                                                             *
-*  3. Run Endpoint Policy comparison report                                                   *
+*  3. Create Policy comparison reports                                                        *
 *                                                                                             *
 ***********************************************************************************************
 ''')
@@ -303,7 +388,7 @@ if __name__ == '__main__':
 *                                                                                             *
 *  2. Download all Endpoint Policies                                                          *
 *                                                                                             *
-*  3. Run Endpoint Policy comparison report                                                   *
+*  3. Create Policy comparison reports                                                        *
 *                                                                                             *
 ***********************************************************************************************
 ''')

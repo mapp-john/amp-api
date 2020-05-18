@@ -235,8 +235,7 @@ def PolicyReport(config):
         # Get script file path
         path = os.path.dirname(os.path.realpath(__file__))
 
-        #print(f'Number of polices found: {len(policies)}')
-        print('Downloading Policies....\n')
+        print('Compiling Policy Reports....\n')
         # Iterate over all policies for each product type separately
         for product,links in policies.items():
             # Skip any Apple IOS Policies
